@@ -1,55 +1,59 @@
-"""Utility functions for PromptLab"""
+"""Utility functions for PromptLab."""
 
-from typing import List
+import re
+from collections.abc import Iterable
+
 from app.models import Prompt
 
 
-def sort_prompts_by_date(prompts: List[Prompt], descending: bool = True) -> List[Prompt]:
+def sort_prompts_by_date(
+    prompts: Iterable[Prompt], descending: bool = True
+) -> list[Prompt]:
     """Sort prompts by creation date.
 
     Args:
-        prompts (List[Prompt]): List of prompts to sort.
+        prompts (Iterable[Prompt]): Prompts to sort.
         descending (bool): Whether to sort newest first. Defaults to ``True``.
 
     Returns:
-        List[Prompt]: Sorted list of prompts.
-
-    Note:
-        There might be a bug here. Check the sort order!
+        list[Prompt]: Sorted list of prompts.
     """
     return sorted(prompts, key=lambda p: p.created_at, reverse=descending)
 
 
-def filter_prompts_by_collection(prompts: List[Prompt], collection_id: str) -> List[Prompt]:
+def filter_prompts_by_collection(
+    prompts: Iterable[Prompt], collection_id: str
+) -> list[Prompt]:
     """Filter prompts belonging to a specific collection.
 
     Args:
-        prompts (List[Prompt]): List of prompts to filter.
+        prompts (Iterable[Prompt]): Prompts to filter.
         collection_id (str): Collection ID to match.
 
     Returns:
-        List[Prompt]: Subset of prompts whose ``collection_id`` equals
+        list[Prompt]: Subset of prompts whose ``collection_id`` equals
             the provided value.
     """
     return [p for p in prompts if p.collection_id == collection_id]
 
 
-def search_prompts(prompts: List[Prompt], query: str) -> List[Prompt]:
+def search_prompts(prompts: Iterable[Prompt], query: str) -> list[Prompt]:
     """Search prompts by title or description.
 
     Args:
-        prompts (List[Prompt]): List of prompts to search.
+        prompts (Iterable[Prompt]): Prompts to search.
         query (str): Search string to look for (case-insensitive).
 
     Returns:
-        List[Prompt]: Prompts where the query appears in the title or
+        list[Prompt]: Prompts where the query appears in the title or
             (if present) the description.
     """
     query_lower = query.lower()
     return [
-        p for p in prompts 
-        if query_lower in p.title.lower() or 
-           (p.description and query_lower in p.description.lower())
+        prompt
+        for prompt in prompts
+        if query_lower in prompt.title.lower()
+        or (prompt.description and query_lower in prompt.description.lower())
     ]
 
 
@@ -72,7 +76,7 @@ def validate_prompt_content(content: str) -> bool:
     return len(content.strip()) >= 10
 
 
-def extract_variables(content: str) -> List[str]:
+def extract_variables(content: str) -> list[str]:
     """Extract template variables from prompt content.
 
     Variables are in the format ``{{variable_name}}``.
@@ -81,8 +85,7 @@ def extract_variables(content: str) -> List[str]:
         content (str): The prompt text containing template variables.
 
     Returns:
-        List[str]: List of variable names found in the content.
+        list[str]: List of variable names found in the content.
     """
-    import re
-    pattern = r'\{\{(\w+)\}\}'
+    pattern = r"\{\{(\w+)\}\}"
     return re.findall(pattern, content)

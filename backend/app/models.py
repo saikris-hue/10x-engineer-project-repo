@@ -1,9 +1,9 @@
-"""Pydantic models for PromptLab"""
+"""Pydantic models for PromptLab."""
 
 from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, Field
 from uuid import uuid4
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 def generate_id() -> str:
@@ -38,8 +38,8 @@ class PromptBase(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1)
-    description: Optional[str] = Field(None, max_length=500)
-    collection_id: Optional[str] = None
+    description: str | None = Field(None, max_length=500)
+    collection_id: str | None = None
 
 
 class PromptCreate(PromptBase):
@@ -68,10 +68,10 @@ class PromptPatch(BaseModel):
         collection_id (Optional[str]): New collection association.
     """
 
-    title: Optional[str] = Field(None, min_length=1, max_length=200)
-    content: Optional[str] = Field(None, min_length=1)
-    description: Optional[str] = Field(None, max_length=500)
-    collection_id: Optional[str] = None
+    title: str | None = Field(None, min_length=1, max_length=200)
+    content: str | None = Field(None, min_length=1)
+    description: str | None = Field(None, max_length=500)
+    collection_id: str | None = None
 
 
 class Prompt(PromptBase):
@@ -89,8 +89,7 @@ class Prompt(PromptBase):
     created_at: datetime = Field(default_factory=get_current_time)
     updated_at: datetime = Field(default_factory=get_current_time)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============== Collection Models ==============
@@ -104,7 +103,7 @@ class CollectionBase(BaseModel):
     """
 
     name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=500)
 
 
 class CollectionCreate(CollectionBase):
@@ -125,8 +124,7 @@ class Collection(CollectionBase):
     id: str = Field(default_factory=generate_id)
     created_at: datetime = Field(default_factory=get_current_time)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============== Response Models ==============
@@ -139,7 +137,7 @@ class PromptList(BaseModel):
         total (int): Total number of prompts returned.
     """
 
-    prompts: List[Prompt]
+    prompts: list[Prompt]
     total: int
 
 
@@ -151,8 +149,83 @@ class CollectionList(BaseModel):
         total (int): Total number of collections returned.
     """
 
-    collections: List[Collection]
+    collections: list[Collection]
     total: int
+
+
+# ============== Version Models ==============
+
+class PromptVersion(BaseModel):
+    """Immutable snapshot of a prompt at a point in time.
+
+    Represents a historical version capturing prompt fields and metadata.
+
+    Attributes:
+        id (str): Unique version identifier.
+        prompt_id (str): ID of the prompt this version belongs to.
+        title (str): Snapshot of prompt title.
+        content (str): Snapshot of prompt content.
+        description (Optional[str]): Snapshot of prompt description.
+        collection_id (Optional[str]): Snapshot of collection association.
+        created_at (datetime): When this version was created.
+        created_by (Optional[str]): User ID or identifier of version creator.
+        note (Optional[str]): Optional human-readable note attached to version.
+    """
+
+    id: str = Field(default_factory=generate_id)
+    prompt_id: str
+    title: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1)
+    description: str | None = Field(None, max_length=500)
+    collection_id: str | None = None
+    created_at: datetime = Field(default_factory=get_current_time)
+    created_by: str | None = None
+    note: str | None = None
+
+    model_config = ConfigDict(frozen=True)
+
+    @classmethod
+    def from_prompt(
+        cls,
+        prompt: "Prompt",
+        created_by: str | None = None,
+        note: str | None = None
+    ) -> "PromptVersion":
+        """Create a version snapshot from a Prompt.
+
+        Args:
+            prompt: The Prompt to snapshot.
+            created_by: Optional user identifier.
+            note: Optional descriptive note.
+
+        Returns:
+            PromptVersion: New immutable snapshot.
+        """
+        return cls(
+            prompt_id=prompt.id,
+            title=prompt.title,
+            content=prompt.content,
+            description=prompt.description,
+            collection_id=prompt.collection_id,
+            created_by=created_by,
+            note=note
+        )
+
+
+class PromptVersionList(BaseModel):
+    """API response model for a list of prompt versions.
+
+    Attributes:
+        versions (List[PromptVersion]): List of version objects.
+        total (int): Total number of versions.
+        limit (int): Pagination limit used in request.
+        offset (int): Pagination offset used in request.
+    """
+
+    versions: list[PromptVersion]
+    total: int
+    limit: int = 50
+    offset: int = 0
 
 
 class HealthResponse(BaseModel):

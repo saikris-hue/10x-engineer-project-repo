@@ -1,0 +1,21 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: promptlab-api
+    ports:
+      - "8000:8000"
+    environment:
+      ENV: development
+      PORT: 8000
+      PYTHONUNBUFFERED: 1
+      PYTHONDONTWRITEBYTECODE: 1
+    volumes:
+      # Bind mount for hot reload development
+      - ./backend:/app
+      # Preserve site-packages to avoid reinstalling on every change
+      - /app/__pycache__
+    command: uvicorn app.api:app --host 0.0.0.0 --port 8000 --reload
+    stdin_open: true
+    tty: true

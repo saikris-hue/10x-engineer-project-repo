@@ -1,10 +1,5 @@
-"""API tests for PromptLab
+"""API tests for PromptLab."""
 
-These tests verify the API endpoints work correctly.
-Students should expand these tests significantly in Week 3.
-"""
-
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -59,14 +54,9 @@ class TestPrompts:
         assert data["id"] == prompt_id
     
     def test_get_prompt_not_found(self, client: TestClient):
-        """Test that getting a non-existent prompt returns 404.
-        
-        NOTE: This test currently FAILS due to Bug #1!
-        The API returns 500 instead of 404.
-        """
+        """Test that getting a non-existent prompt returns 404."""
         response = client.get("/prompts/nonexistent-id")
-        # This should be 404, but there's a bug...
-        assert response.status_code == 404  # Will fail until bug is fixed
+        assert response.status_code == 404
     
     def test_delete_prompt(self, client: TestClient, sample_prompt_data):
         # Create a prompt first
@@ -79,8 +69,7 @@ class TestPrompts:
         
         # Verify it's gone
         get_response = client.get(f"/prompts/{prompt_id}")
-        # Note: This might fail due to Bug #1
-        assert get_response.status_code in [404, 500]  # 404 after fix
+        assert get_response.status_code == 404
     
     def test_update_prompt(self, client: TestClient, sample_prompt_data):
         # Create a prompt first
@@ -103,15 +92,10 @@ class TestPrompts:
         data = response.json()
         assert data["title"] == "Updated Title"
         
-        # NOTE: This assertion will fail due to Bug #2!
-        # The updated_at should be different from original
-        # assert data["updated_at"] != original_updated_at  # Uncomment after fix
+        assert data["updated_at"] != original_updated_at
     
     def test_sorting_order(self, client: TestClient):
-        """Test that prompts are sorted newest first.
-        
-        NOTE: This test might fail due to Bug #3!
-        """
+        """Test that prompts are sorted newest first."""
         import time
         
         # Create prompts with delay
@@ -126,7 +110,71 @@ class TestPrompts:
         prompts = response.json()["prompts"]
         
         # Newest (Second) should be first
-        assert prompts[0]["title"] == "Second"  # Will fail until Bug #3 fixed
+        assert prompts[0]["title"] == "Second"
+
+    def test_create_prompt_with_collection_invalid(self, client: TestClient, sample_prompt_data):
+        # Attempt to create a prompt with a non-existent collection
+        data = {**sample_prompt_data, "collection_id": "nonexistent-collection"}
+        response = client.post("/prompts", json=data)
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Collection not found"
+
+    def test_create_prompt_unicode_and_special_chars(self, client: TestClient):
+        data = {
+            "title": "Unicode ✅",
+            "content": "Handle emoji 🚀 and special chars: !@#$%^&*()[]{}<>",
+            "description": "测试 unicode"
+        }
+        response = client.post("/prompts", json=data)
+        assert response.status_code == 201
+        body = response.json()
+        assert body["title"] == data["title"]
+        assert "id" in body
+
+    def test_search_prompts(self, client: TestClient, sample_prompt_data):
+        # Create two prompts, one with 'review' term
+        p1 = {"title": "Code Review Prompt", "content": "Please review this code", "description": "review"}
+        p2 = {"title": "Other", "content": "Some content", "description": "misc"}
+        client.post("/prompts", json=p1)
+        client.post("/prompts", json=p2)
+
+        response = client.get("/prompts?search=review")
+        assert response.status_code == 200
+        prompts = response.json()["prompts"]
+        assert any("review" in ((p.get("description") or "").lower()) or "review" in ((p.get("title") or "").lower()) for p in prompts)
+
+    def test_filter_by_collection(self, client: TestClient, sample_collection_data, sample_prompt_data):
+        # Create collection and attach prompt
+        col = client.post("/collections", json=sample_collection_data).json()
+        prompt_data = {**sample_prompt_data, "collection_id": col["id"]}
+        client.post("/prompts", json=prompt_data)
+
+        response = client.get(f"/prompts?collection_id={col['id']}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert data["prompts"][0]["collection_id"] == col["id"]
+
+    def test_patch_partial_update(self, client: TestClient, sample_prompt_data):
+        # Create and partially update a prompt
+        create = client.post("/prompts", json=sample_prompt_data).json()
+        pid = create["id"]
+
+        patch = {"description": "Patched description"}
+        resp = client.patch(f"/prompts/{pid}", json=patch)
+        assert resp.status_code == 200
+        updated = resp.json()
+        assert updated["description"] == "Patched description"
+        assert updated["content"] == sample_prompt_data["content"]
+
+    def test_update_not_found(self, client: TestClient):
+        updated_data = {"title": "X", "content": "Y", "description": "Z"}
+        resp = client.put("/prompts/nonexistent", json=updated_data)
+        assert resp.status_code == 404
+
+    def test_delete_not_found(self, client: TestClient):
+        resp = client.delete("/prompts/nonexistent")
+        assert resp.status_code == 404
 
 
 class TestCollections:
@@ -152,12 +200,7 @@ class TestCollections:
         assert response.status_code == 404
     
     def test_delete_collection_with_prompts(self, client: TestClient, sample_collection_data, sample_prompt_data):
-        """Test deleting a collection that has prompts.
-        
-        NOTE: Bug #4 - prompts become orphaned after collection deletion.
-        This test documents the current (buggy) behavior.
-        After fixing, update the test to verify correct behavior.
-        """
+        """Test deleting a collection also removes its prompts."""
         # Create collection
         col_response = client.post("/collections", json=sample_collection_data)
         collection_id = col_response.json()["id"]
@@ -170,10 +213,18 @@ class TestCollections:
         # Delete collection
         client.delete(f"/collections/{collection_id}")
         
-        # The prompt still exists but has invalid collection_id
-        # This is Bug #4 - should be handled properly
         prompts = client.get("/prompts").json()["prompts"]
-        if prompts:
-            # Prompt exists with orphaned collection_id
-            assert prompts[0]["collection_id"] == collection_id
-            # After fix, collection_id should be None or prompt should be deleted
+        assert all(p.get("collection_id") != collection_id for p in prompts)
+
+
+class TestValidationAndErrors:
+    """Additional tests for validation and error scenarios."""
+
+    def test_create_collection_missing_name(self, client: TestClient):
+        # Missing required field 'name' should return 422 from FastAPI
+        resp = client.post("/collections", json={})
+        assert resp.status_code == 422
+
+    def test_get_collection_not_found(self, client: TestClient):
+        resp = client.get("/collections/nonexistent-id")
+        assert resp.status_code == 404

@@ -1,0 +1,61 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Upgrade pip and packaging tools
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          
+          # Install main requirements
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          
+          # Install dev requirements
+          if [ -f requirements-dev.txt ]; then
+            pip install -r requirements-dev.txt
+          elif [ -f dev-requirements.txt ]; then
+            pip install -r dev-requirements.txt
+          fi
+          
+          # Install from pyproject.toml if no requirements files
+          if [ ! -f requirements.txt ] && [ -f pyproject.toml ]; then
+            pip install .
+            pip install ".[dev]" 2>/dev/null || true
+          fi
+          
+          # Ensure linting and testing tools are installed
+          pip install ruff flake8 pytest pytest-cov
+
+      - name: Lint with ruff
+        run: |
+          if command -v ruff &> /dev/null; then
+            ruff check .
+            ruff format --check . || true
+          else
+            flake8 .
+          fi
+        continue-on-error: true
+
+      - name: Run tests with coverage
+        run: |
+          pytest --cov=backend/app --cov-report=term-missing --cov-fail-under=80 backend/tests/
