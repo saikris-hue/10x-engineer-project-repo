@@ -1,5 +1,7 @@
 """FastAPI routes for PromptLab."""
 
+import os
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,6 +29,15 @@ app = FastAPI(
     description="AI Prompt Engineering Platform",
     version=__version__
 )
+
+
+def _get_cors_origins() -> list[str]:
+    """Return the configured CORS origins for browser clients."""
+    raw_origins = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
+    )
+    return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
 
 
 def _get_prompt_or_404(prompt_id: str) -> Prompt:
@@ -100,10 +111,10 @@ def _build_prompt_from_patch(existing: Prompt, prompt_data: PromptPatch) -> Prom
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_get_cors_origins(),
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
 
 
